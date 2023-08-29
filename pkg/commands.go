@@ -1,21 +1,23 @@
 package pkg
 
 import (
-	"fmt"
-	"reflect"
-	"strings"
+	"bytes"
+	"text/template"
 )
 
 // TODO just use text/template
-func Tpl(template string, vars any) string {
-	val := reflect.ValueOf(vars)
-	typ := val.Type()
-	bindings := make([]string, val.NumField()*2)
-	for i := 0; i < val.NumField(); i++ {
-		bindings[i*2] = fmt.Sprintf("{.%s}", typ.Field(i).Name)
-		bindings[(i*2)+1] = val.Field(i).String()
+func Tpl(body string, vars any) string {
+	tmpl, err := template.New("").Parse(body)
+	if err != nil {
+		panic(err)
 	}
-	return strings.NewReplacer(bindings...).Replace(template)
+
+	var buf bytes.Buffer
+	if err := tmpl.Execute(&buf, vars); err != nil {
+		panic(err)
+	}
+
+	return buf.String()
 }
 
 type CreateDatabase struct {
@@ -67,9 +69,7 @@ type DropTable struct {
 }
 
 type AddColumn struct {
-	Database string
-	Schema   string
-	Table    string
+	Table    *Table
 	Name     string
 	Nullable bool
 }
