@@ -75,9 +75,5 @@ type AddColumn struct {
 }
 
 type DropColumn struct {
-	Database string
-	Schema   string
-	Table    string
-	Name     string
-	Nullable bool
+	Column *Column
 }

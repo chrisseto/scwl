@@ -74,9 +74,9 @@ func (o *oracle) Execute(ctx context.Context, cmd Command) error {
 func (o *oracle) State(ctx context.Context) (StateNode, error) {
 	return loadState(ctx, o.conn, Queries{
 		Databases: `SELECT name as id, name FROM databases ORDER BY name DESC`,
-		Schemas:   `SELECT database || name as id, database as database_id, name FROM schemas ORDER BY name DESC`,
-		Tables:    `SELECT database || schema || name as id, database || schema as schema_id, name FROM tables ORDER BY name DESC`,
-		Columns:   `SELECT database || schema || "table" || name as id, "table" as table_id, name FROM columns ORDER BY name DESC`,
+		Schemas:   `SELECT database as database_id, database || name as id, name FROM schemas ORDER BY name DESC`,
+		Tables:    `SELECT database || schema as schema_id, database || schema || name as id, name FROM tables ORDER BY name DESC`,
+		Columns:   `SELECT database || schema || "table" as table_id, database || schema || "table" || name as id, name FROM columns ORDER BY name DESC`,
 		// Indexes:
 	})
 }

@@ -3,21 +3,22 @@ package pkg
 import (
 	"fmt"
 	"math/rand"
+	"reflect"
 )
 
-func Filter[T any](in []T, filter func(T) bool) []T {
-	out := make([]T, 0, len(in))
-	for i := range in {
-		if filter(in[i]) {
-			out = append(out, in[i])
-		}
-	}
-	return out
+var Weights = map[reflect.Type]int{
+	reflect.TypeOf(AddColumn{}):    5,
+	reflect.TypeOf(CreateTable{}):  2,
+	reflect.TypeOf(DropDatabase{}): 0,
+	reflect.TypeOf(DropColumn{}):   0,
+	reflect.TypeOf(DropSchema{}):   0,
 }
 
 func GenerateCommand(s *Root) Command {
 	var cmds []Command
 
+	// TODO remove parents as all referencable nodes can be reached via
+	// properties.
 	Walk(s, func(sn StateNode, parents []StateNode) {
 		switch n := sn.(type) {
 		case *Root:
@@ -34,12 +35,18 @@ func GenerateCommand(s *Root) Command {
 			)
 
 		case *Schema:
+			if n.Name != "public" {
+				cmds = append(
+					cmds,
+					DropSchema{
+						Database: parents[0].(*Database).Name,
+						Name:     n.Name,
+					},
+				)
+			}
+
 			cmds = append(
 				cmds,
-				DropSchema{
-					Database: parents[0].(*Database).Name,
-					Name:     n.Name,
-				},
 				// RenameSchema{
 				// 	Database: parents[0].(*Database).Name,
 				// 	Schema:   n.Name,
@@ -60,6 +67,7 @@ func GenerateCommand(s *Root) Command {
 					Schema:   parents[0].(*Schema).Name,
 					Name:     n.Name,
 				},
+				AddColumn{Table: n, Name: RandomString()},
 				// RenameTable{
 				// 	Database: parents[1].(*Database).Name,
 				// 	Schema:   parents[0].(*Schema).Name,
@@ -68,21 +76,32 @@ func GenerateCommand(s *Root) Command {
 				// },
 			)
 
+		case *Column:
+			cmds = append(
+				cmds,
+				DropColumn{Column: n},
+			)
+
 		default:
 			panic(fmt.Sprintf("Unhandled Type: %T", sn))
 
 		}
 	})
 
-	cmds = Filter(cmds, func(sn Command) bool {
-		switch sn.(type) {
-		case DropSchema, DropDatabase:
-			return false
+	// TODO this is pretty memory hungry, there's certainly a better way to do
+	// this. I'm just a bit lazy.
+	var weighted []Command
+	for _, cmd := range cmds {
+		weight, ok := Weights[reflect.TypeOf(cmd)]
+		if !ok {
+			weight = 1
 		}
-		return true
-	})
+		for i := 0; i < weight; i++ {
+			weighted = append(weighted, cmd)
+		}
+	}
 
-	return cmds[rand.Intn(len(cmds))]
+	return weighted[rand.Intn(len(weighted))]
 }
 
 func Walk(n StateNode, cb func(StateNode, []StateNode)) {

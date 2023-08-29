@@ -43,7 +43,7 @@ var translations = map[reflect.Type]Translation{
 		DML: `INSERT INTO schemas(database, name) VALUES ('{{.Database}}', '{{.Name}}')`,
 	},
 	reflect.TypeOf(DropSchema{}): {
-		DDL: `DROP SCHEMA "{{.Database}}"."{{.Name}}"`,
+		DDL: `DROP SCHEMA "{{.Database}}"."{{.Name}}" CASCADE`,
 		DML: `DELETE FROM schemas WHERE name = '{{.Name}}' and database = '{{.Database}}'`,
 	},
 	reflect.TypeOf(CreateTable{}): {
@@ -53,5 +53,13 @@ var translations = map[reflect.Type]Translation{
 	reflect.TypeOf(DropTable{}): {
 		DDL: `DROP TABLE "{{.Database}}"."{{.Schema}}"."{{.Name}}"`,
 		DML: `DELETE FROM tables WHERE  database = '{{.Database}}' AND schema = '{{.Schema}}' and name = '{{.Name}}'`,
+	},
+	reflect.TypeOf(AddColumn{}): {
+		DDL: `ALTER TABLE "{{ .Table.Schema.Database.Name }}"."{{ .Table.Schema.Name }}"."{{ .Table.Name }}" ADD COLUMN "{{ .Name }}" TEXT NOT NULL`,
+		DML: `INSERT INTO columns(database, schema, "table", name, nullable) VALUES ('{{.Table.Schema.Database.Name}}', '{{.Table.Schema.Name}}', '{{.Table.Name}}', '{{.Name}}', false)`,
+	},
+	reflect.TypeOf(DropColumn{}): {
+		DDL: `ALTER TABLE "{{ .Column.Table.Schema.Database.Name }}"."{{ .Column.Table.Schema.Name }}"."{{ .Column.Table.Name }}" DROP COLUMN "{{ .Column.Name }}"`,
+		DML: `DELETE FROM columns WHERE database || schema || "table" || name = '{{ .Column.Table.Schema.Database.Name }}{{ .Column.Table.Schema.Name }}{{ .Column.Table.Name }}{{ .Column.Name }}'`,
 	},
 }

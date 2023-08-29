@@ -25,11 +25,13 @@ type Database struct {
 }
 
 type Schema struct {
-	Name   string   `db:"name"`
-	Tables []*Table `db:"-"`
+	Database *Database `db:"-" json:"-"`
+	Name     string    `db:"name"`
+	Tables   []*Table  `db:"-"`
 }
 
 type Table struct {
+	Schema  *Schema   `db:"-" json:"-"`
 	Name    string    `db:"name"`
 	Columns []*Column `db:"-"`
 }
@@ -41,7 +43,8 @@ type Index struct {
 }
 
 type Column struct {
-	Name string `db:"name"`
+	Table *Table `db:"-" json:"-"`
+	Name  string `db:"name"`
 }
 
 func (n *Root) Children() []StateNode     { return asStateNodes(n.Databases) }
@@ -120,6 +123,7 @@ func loadState(ctx context.Context, conn *sqlx.DB, queries Queries) (*Root, erro
 		schema := &schemas[i]
 		schemasByID[schema.ID] = &schema.Schema
 
+		schema.Database = databasesByID[schema.DatabaseID]
 		databasesByID[schema.DatabaseID].Schemas = append(databasesByID[schema.DatabaseID].Schemas, &schema.Schema)
 	}
 
@@ -128,6 +132,7 @@ func loadState(ctx context.Context, conn *sqlx.DB, queries Queries) (*Root, erro
 		table := &tables[i]
 		tablesByID[table.ID] = &table.Table
 
+		table.Schema = schemasByID[table.SchemaID]
 		schemasByID[table.SchemaID].Tables = append(schemasByID[table.SchemaID].Tables, &table.Table)
 	}
 
@@ -136,6 +141,7 @@ func loadState(ctx context.Context, conn *sqlx.DB, queries Queries) (*Root, erro
 		column := &columns[i]
 		columnsByID[column.ID] = &column.Column
 
+		column.Table = tablesByID[column.TableID]
 		tablesByID[column.TableID].Columns = append(tablesByID[column.TableID].Columns, &column.Column)
 	}
 

@@ -5,9 +5,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"math/rand"
 	"os"
 	"os/signal"
 	"reflect"
+	"time"
 
 	"github.com/chrisseto/scwl/pkg"
 	"github.com/cockroachdb/cockroach-go/v2/testserver"
@@ -65,12 +67,18 @@ func main() {
 	oracle := NewOracle(ctx)
 	logger := log.Default()
 
+	seed := time.Now().UnixNano()
+	rand.Seed(seed)
+
+	iterations := 500
+
+	log.Printf("Iterations: %d, Seed: %d", iterations, seed)
+
 	state := MustT(oracle.State(ctx))
-	for i := 0; i < 10; i++ {
+	for i := 0; i < iterations; i++ {
 		cmd := pkg.GenerateCommand(state.(*pkg.Root))
 
-		logger.Printf("Step %d:", i)
-		logger.Printf("\tCommand %#v", cmd)
+		logger.Printf("Step %d: %#v", i, cmd)
 
 		if err := oracle.Execute(ctx, cmd); err != nil {
 			panic(err)
@@ -82,10 +90,13 @@ func main() {
 		state = MustT(oracle.State(ctx))
 		sutState := MustT(sut.State(ctx))
 
-		logger.Printf("\tSUT State: %s", MustT(json.MarshalIndent(sutState, "\t\t", "\t")))
-		logger.Printf("\tOracle State: %s", MustT(json.MarshalIndent(state, "\t\t", "\t")))
 		if !reflect.DeepEqual(state, sutState) {
 			panic("State mismatch!")
 		}
 	}
+
+	state = MustT(oracle.State(ctx))
+	sutState := MustT(sut.State(ctx))
+	logger.Printf("\tSUT State: %s", MustT(json.MarshalIndent(sutState, "\t\t", "\t")))
+	logger.Printf("\tOracle State: %s", MustT(json.MarshalIndent(state, "\t\t", "\t")))
 }
