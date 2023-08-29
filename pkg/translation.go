@@ -28,38 +28,38 @@ func AsDML(cmd Command) string {
 
 var translations = map[reflect.Type]Translation{
 	reflect.TypeOf(CreateDatabase{}): {
-		DDL: `CREATE DATABASE "{{.Name}}"`,
+		DDL: `CREATE DATABASE "{{ .Name }}"`,
 		DML: `
-			INSERT INTO databases(name) VALUES ('{{.Name}}');
-			INSERT INTO schemas(database, name) VALUES ('{{.Name}}', 'public');
+			INSERT INTO databases(name) VALUES ('{{ .Name }}');
+			INSERT INTO schemas(database_id, name) VALUES ('{{ .Name }}', 'public');
 		`,
 	},
 	reflect.TypeOf(DropDatabase{}): {
-		DDL: `DROP DATABASE "{{.Name}}"`,
-		DML: `DELETE FROM databases WHERE name = '{{.Name}}'`,
+		DDL: `DROP DATABASE "{{ .Database.Name }}"`,
+		DML: `DELETE FROM databases WHERE name = '{{ .Name }}'`,
 	},
 	reflect.TypeOf(CreateSchema{}): {
-		DDL: `CREATE SCHEMA "{{.Database}}"."{{.Name}}"`,
-		DML: `INSERT INTO schemas(database, name) VALUES ('{{.Database}}', '{{.Name}}')`,
+		DDL: `CREATE SCHEMA "{{.Database.Name }}"."{{.Name}}"`,
+		DML: `INSERT INTO schemas(database_id, name) VALUES ('{{.Database.Name}}', '{{.Name}}')`,
 	},
 	reflect.TypeOf(DropSchema{}): {
-		DDL: `DROP SCHEMA "{{.Database}}"."{{.Name}}" CASCADE`,
-		DML: `DELETE FROM schemas WHERE name = '{{.Name}}' and database = '{{.Database}}'`,
+		DDL: `DROP SCHEMA {{.Database | fqnq}} CASCADE`,
+		DML: `DELETE FROM schemas WHERE id = '{{ .Database | fqn }}'`,
 	},
 	reflect.TypeOf(CreateTable{}): {
-		DDL: `CREATE TABLE "{{.Database}}"."{{.Schema}}"."{{.Name}}" ()`,
-		DML: `INSERT INTO tables(database, schema, name) VALUES ('{{.Database}}', '{{.Schema}}', '{{.Name}}')`,
+		DDL: `CREATE TABLE {{ .Schema | fqnq }}."{{.Name}}" ()`,
+		DML: `INSERT INTO tables(schema_id, name) VALUES ('{{ .Schema | fqn }}', '{{.Name}}')`,
 	},
 	reflect.TypeOf(DropTable{}): {
-		DDL: `DROP TABLE "{{.Database}}"."{{.Schema}}"."{{.Name}}"`,
-		DML: `DELETE FROM tables WHERE  database = '{{.Database}}' AND schema = '{{.Schema}}' and name = '{{.Name}}'`,
+		DDL: `DROP TABLE {{ .Table | fqnq }}`,
+		DML: `DELETE FROM tables WHERE id = '{{ .Table | fqn}}'`,
 	},
 	reflect.TypeOf(AddColumn{}): {
-		DDL: `ALTER TABLE "{{ .Table.Schema.Database.Name }}"."{{ .Table.Schema.Name }}"."{{ .Table.Name }}" ADD COLUMN "{{ .Name }}" TEXT NOT NULL`,
-		DML: `INSERT INTO columns(database, schema, "table", name, nullable) VALUES ('{{.Table.Schema.Database.Name}}', '{{.Table.Schema.Name}}', '{{.Table.Name}}', '{{.Name}}', false)`,
+		DDL: `ALTER TABLE {{ .Table | fqnq }} ADD COLUMN "{{ .Name }}" TEXT NOT NULL`,
+		DML: `INSERT INTO columns(table_id, name, nullable) VALUES ('{{ .Table | fqn }}', '{{ .Name }}', false)`,
 	},
 	reflect.TypeOf(DropColumn{}): {
-		DDL: `ALTER TABLE "{{ .Column.Table.Schema.Database.Name }}"."{{ .Column.Table.Schema.Name }}"."{{ .Column.Table.Name }}" DROP COLUMN "{{ .Column.Name }}"`,
-		DML: `DELETE FROM columns WHERE database || schema || "table" || name = '{{ .Column.Table.Schema.Database.Name }}{{ .Column.Table.Schema.Name }}{{ .Column.Table.Name }}{{ .Column.Name }}'`,
+		DDL: `ALTER TABLE {{ .Table | fqnq }} DROP COLUMN "{{ .Column.Name }}"`,
+		DML: `DELETE FROM columns WHERE id = '{{ .Column | fqn }}'`,
 	},
 }

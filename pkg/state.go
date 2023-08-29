@@ -34,12 +34,20 @@ type Table struct {
 	Schema  *Schema   `db:"-" json:"-"`
 	Name    string    `db:"name"`
 	Columns []*Column `db:"-"`
+	Indexes []*Index  `db:"-"`
+	// ForeignKeyConstraints []*ForeignKeyConstraints `db:"-"`
 }
 
+// type ForeignKeyConstraints struct {
+// 	Name string    `db:"name"`
+// 	From []*Column `db:"-" json:"-"`
+// 	To   []*Column `db:"-" json:"-"`
+// }
+
 type Index struct {
-	// Name    string    `db:"name"`
-	// Table   *Table    `db:"-"`
-	// Columns []*Column `db:"-"`
+	Name    string    `db:"name"`
+	Table   *Table    `db:"-" json:"-"`
+	Columns []*Column `db:"-" json:"-"`
 }
 
 type Column struct {
@@ -52,14 +60,17 @@ func (n *Database) Children() []StateNode { return asStateNodes(n.Schemas) }
 func (n *Schema) Children() []StateNode   { return asStateNodes(n.Tables) }
 func (n *Table) Children() []StateNode    { return asStateNodes(n.Columns) }
 func (n *Column) Children() []StateNode   { return nil }
+func (n *Index) Children() []StateNode    { return nil }
 
 type Queries struct {
-	Databases string
-	Schemas   string
-	Tables    string
-	Columns   string
-	Indexes   string
-	// ColumnsToIndexes string
+	Databases        string
+	Schemas          string
+	Tables           string
+	Columns          string
+	Indexes          string
+	ColumnsToIndexes string
+	// ForeignKeyConstraints          string
+	// ColumnsToForeignKeyConstraints string
 }
 
 func loadState(ctx context.Context, conn *sqlx.DB, queries Queries) (*Root, error) {
@@ -86,6 +97,11 @@ func loadState(ctx context.Context, conn *sqlx.DB, queries Queries) (*Root, erro
 		Column
 	}
 
+	// var columnIndexes []struct {
+	// 	TableID string `db:"table_id"`
+	// 	IndexID string `db:"index_id"`
+	// }
+	//
 	// var indexes []struct {
 	// 	ID      string `db:"id"`
 	// 	TableID string `db:"table_id"`

@@ -75,6 +75,14 @@ func main() {
 	log.Printf("Iterations: %d, Seed: %d", iterations, seed)
 
 	state := MustT(oracle.State(ctx))
+
+	defer func() {
+		state = MustT(oracle.State(ctx))
+		sutState := MustT(sut.State(ctx))
+		logger.Printf("\tSUT State: %s", MustT(json.MarshalIndent(sutState, "\t\t", "\t")))
+		logger.Printf("\tOracle State: %s", MustT(json.MarshalIndent(state, "\t\t", "\t")))
+	}()
+
 	for i := 0; i < iterations; i++ {
 		cmd := pkg.GenerateCommand(state.(*pkg.Root))
 
@@ -94,9 +102,4 @@ func main() {
 			panic("State mismatch!")
 		}
 	}
-
-	state = MustT(oracle.State(ctx))
-	sutState := MustT(sut.State(ctx))
-	logger.Printf("\tSUT State: %s", MustT(json.MarshalIndent(sutState, "\t\t", "\t")))
-	logger.Printf("\tOracle State: %s", MustT(json.MarshalIndent(state, "\t\t", "\t")))
 }

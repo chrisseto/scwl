@@ -17,7 +17,7 @@ var Weights = map[reflect.Type]int{
 func GenerateCommand(s *Root) Command {
 	var cmds []Command
 
-	// TODO remove parents as all referencable nodes can be reached via
+	// TODO remove parents, all reference-able nodes can be reached via
 	// properties.
 	Walk(s, func(sn StateNode, parents []StateNode) {
 		switch n := sn.(type) {
@@ -29,19 +29,16 @@ func GenerateCommand(s *Root) Command {
 		case *Database:
 			cmds = append(
 				cmds,
-				DropDatabase{Name: n.Name},
+				DropDatabase{Database: n},
 				// RenameDatabase{Database: n.Name, Name: RandomString()},
-				CreateSchema{Database: n.Name, Name: RandomString()},
+				CreateSchema{Database: n, Name: RandomString()},
 			)
 
 		case *Schema:
 			if n.Name != "public" {
 				cmds = append(
 					cmds,
-					DropSchema{
-						Database: parents[0].(*Database).Name,
-						Name:     n.Name,
-					},
+					DropSchema{Schema: n},
 				)
 			}
 
@@ -52,21 +49,13 @@ func GenerateCommand(s *Root) Command {
 				// 	Schema:   n.Name,
 				// 	Name:     RandomString(),
 				// },
-				CreateTable{
-					Database: parents[0].(*Database).Name,
-					Schema:   n.Name,
-					Name:     RandomString(),
-				},
+				CreateTable{Schema: n, Name: RandomString()},
 			)
 
 		case *Table:
 			cmds = append(
 				cmds,
-				DropTable{
-					Database: parents[1].(*Database).Name,
-					Schema:   parents[0].(*Schema).Name,
-					Name:     n.Name,
-				},
+				DropTable{Table: n},
 				AddColumn{Table: n, Name: RandomString()},
 				// RenameTable{
 				// 	Database: parents[1].(*Database).Name,
@@ -90,6 +79,7 @@ func GenerateCommand(s *Root) Command {
 
 	// TODO this is pretty memory hungry, there's certainly a better way to do
 	// this. I'm just a bit lazy.
+	// https://en.wikipedia.org/wiki/Alias_method
 	var weighted []Command
 	for _, cmd := range cmds {
 		weight, ok := Weights[reflect.TypeOf(cmd)]
