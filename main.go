@@ -33,7 +33,7 @@ func NewSUT(ctx context.Context) pkg.System {
 	// logger := log.Default()
 
 	// Use 23.1.0 to target https://github.com/cockroachdb/cockroach/pull/107633
-	// Seed: 1693416869569725000 will produce a reproduction
+	// Seed: 1693416869569725000 will produce a reproduction at eed69fee47857c2a3d50b47878180b4a1f198bd6
 	sutTS := MustT(testserver.NewTestServer(testserver.CustomVersionOpt("v23.1.0")))
 	go func() {
 		<-ctx.Done()
