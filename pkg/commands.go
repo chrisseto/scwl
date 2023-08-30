@@ -1,53 +1,5 @@
 package pkg
 
-import (
-	"bytes"
-	"fmt"
-	"text/template"
-)
-
-// TODO just use text/template
-func Tpl(body string, vars any) string {
-	tmpl, err := template.New("").Funcs(template.FuncMap{
-		"fqn": func(sn StateNode) string {
-			switch n := sn.(type) {
-			case *Database:
-				return n.Name
-			case *Schema:
-				return fmt.Sprintf("%s.%s", n.Database.Name, n.Name)
-			case *Table:
-				return fmt.Sprintf("%s.%s.%s", n.Schema.Database.Name, n.Schema.Name, n.Name)
-			case *Column:
-				return fmt.Sprintf("%s.%s.%s.%s", n.Table.Schema.Database.Name, n.Table.Schema.Name, n.Table.Name, n.Name)
-			default:
-				panic(fmt.Sprintf("unhandled type: %T", sn))
-			}
-		},
-		"fqnq": func(sn StateNode) string {
-			switch n := sn.(type) {
-			case *Database:
-				return fmt.Sprintf("%q", n.Name)
-			case *Schema:
-				return fmt.Sprintf("%q.%q", n.Database.Name, n.Name)
-			case *Table:
-				return fmt.Sprintf("%q.%q.%q", n.Schema.Database.Name, n.Schema.Name, n.Name)
-			default:
-				panic(fmt.Sprintf("unhandled type: %T", sn))
-			}
-		},
-	}).Parse(body)
-	if err != nil {
-		panic(err)
-	}
-
-	var buf bytes.Buffer
-	if err := tmpl.Execute(&buf, vars); err != nil {
-		panic(err)
-	}
-
-	return buf.String()
-}
-
 type CreateDatabase struct {
 	Name string
 }
@@ -97,4 +49,25 @@ type AddColumn struct {
 
 type DropColumn struct {
 	Column *Column
+}
+
+type CreateIndex struct {
+	Table   *Table
+	Columns []*Column
+	Name    string
+	Unique  bool
+}
+
+type DropIndex struct {
+	Index *Index
+}
+
+type CreateForeignKeyConstraint struct {
+	From *Column
+	To   *Column
+	Name string
+}
+
+type DropForeignKeyConstraint struct {
+	ForeignKeyConstraint *ForeignKeyConstraint
 }

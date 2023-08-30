@@ -19,6 +19,10 @@ type System interface {
 	State(context.Context) (StateNode, error)
 }
 
+func FlipCoin() bool {
+	return rand.Intn(2) == 0
+}
+
 func RandomString(prefixes ...string) string {
 	for len(prefixes) < 3 {
 		prefixes = append(prefixes, words[rand.Intn(len(words))])

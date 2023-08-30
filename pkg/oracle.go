@@ -36,13 +36,21 @@ CREATE TABLE columns (
 CREATE TABLE indexes (
 	id TEXT PRIMARY KEY AS (table_id || '.' || name) STORED,
 	table_id TEXT NOT NULL REFERENCES tables(id) ON DELETE CASCADE ON UPDATE CASCADE,
-	name TEXT NOT NULL
+	name TEXT NOT NULL,
+	"unique" BOOL NOT NULL
 );
 
 CREATE TABLE index_columns (
 	index_id TEXT NOT NULL REFERENCES indexes(id) ON DELETE CASCADE ON UPDATE CASCADE,
 	column_id TEXT NOT NULL REFERENCES columns(id) ON DELETE CASCADE ON UPDATE CASCADE,
 	PRIMARY KEY (index_id, column_id)
+);
+
+CREATE TABLE fk_constraints (
+	to_id TEXT NOT NULL REFERENCES columns(id) ON DELETE CASCADE ON UPDATE CASCADE,
+	from_id TEXT NOT NULL REFERENCES columns(id) ON DELETE CASCADE ON UPDATE CASCADE,
+	name TEXT NOT NULL,
+	PRIMARY KEY (to_id, from_id, name)
 );
 `
 
@@ -81,10 +89,12 @@ func (o *oracle) Execute(ctx context.Context, cmd Command) error {
 
 func (o *oracle) State(ctx context.Context) (StateNode, error) {
 	return loadState(ctx, o.conn, Queries{
-		Databases: `SELECT id, name FROM databases ORDER BY name DESC`,
-		Schemas:   `SELECT database_id, id, name FROM schemas ORDER BY name DESC`,
-		Tables:    `SELECT schema_id, id, name FROM tables ORDER BY name DESC`,
-		Columns:   `SELECT table_id, id, name FROM columns ORDER BY name DESC`,
-		// Indexes:
+		Databases:             `SELECT id, name FROM databases ORDER BY name DESC`,
+		Schemas:               `SELECT database_id, id, name FROM schemas ORDER BY name DESC`,
+		Tables:                `SELECT schema_id, id, name FROM tables ORDER BY name DESC`,
+		Columns:               `SELECT table_id, id, name FROM columns ORDER BY name DESC`,
+		Indexes:               `SELECT table_id, id, name, "unique" FROM indexes ORDER BY name DESC`,
+		ColumnsToIndexes:      `SELECT index_id, column_id FROM index_columns ORDER BY column_id DESC`,
+		ForeignKeyConstraints: `SELECT from_id, to_id, name FROM fk_constraints ORDER BY name DESC`,
 	})
 }

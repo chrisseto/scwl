@@ -8,18 +8,13 @@ import (
 	"math/rand"
 	"os"
 	"os/signal"
-	"reflect"
 	"time"
 
 	"github.com/chrisseto/scwl/pkg"
 	"github.com/cockroachdb/cockroach-go/v2/testserver"
+	"github.com/google/go-cmp/cmp"
 	_ "github.com/jackc/pgx/v5/stdlib"
 	"github.com/jmoiron/sqlx"
-)
-
-const (
-	oracleURL = "postgresql://root@localhost:26257/defaultdb?sslmode=disable"
-	sutURL    = ""
 )
 
 type NopWriter struct{}
@@ -35,8 +30,11 @@ func MustT[T any](r T, err error) T {
 
 func NewSUT(ctx context.Context) pkg.System {
 	logger := log.New(NopWriter{}, "", 0)
+	// logger := log.Default()
 
-	sutTS := MustT(testserver.NewTestServer())
+	// Use 23.1.0 to target https://github.com/cockroachdb/cockroach/pull/107633
+	// Seed: 1693416869569725000 will produce a reproduction
+	sutTS := MustT(testserver.NewTestServer(testserver.CustomVersionOpt("v23.1.0")))
 	go func() {
 		<-ctx.Done()
 		sutTS.Stop()
@@ -48,6 +46,7 @@ func NewSUT(ctx context.Context) pkg.System {
 
 func NewOracle(ctx context.Context) pkg.System {
 	logger := log.New(NopWriter{}, "", 0)
+	// logger := log.Default()
 
 	oracleTS := MustT(testserver.NewTestServer())
 	go func() {
@@ -77,6 +76,8 @@ func main() {
 	state := MustT(oracle.State(ctx))
 
 	defer func() {
+		ctx := context.Background()
+
 		state = MustT(oracle.State(ctx))
 		sutState := MustT(sut.State(ctx))
 		logger.Printf("\tSUT State: %s", MustT(json.MarshalIndent(sutState, "\t\t", "\t")))
@@ -98,8 +99,8 @@ func main() {
 		state = MustT(oracle.State(ctx))
 		sutState := MustT(sut.State(ctx))
 
-		if !reflect.DeepEqual(state, sutState) {
-			panic("State mismatch!")
+		if !cmp.Equal(state, sutState) {
+			log.Fatalf("State Mismatch!\n%s", cmp.Diff(state, sutState))
 		}
 	}
 }

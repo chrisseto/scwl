@@ -5,6 +5,7 @@ go 1.19
 require (
 	github.com/cockroachdb/cockroach-go/v2 v2.3.5
 	github.com/cockroachdb/errors v1.11.1
+	github.com/google/go-cmp v0.5.9
 	github.com/jackc/pgx/v5 v5.4.3
 	github.com/jmoiron/sqlx v1.3.5
 )

@@ -7,6 +7,14 @@ import (
 	"github.com/jmoiron/sqlx"
 )
 
+func flatten[T any](in ...[]T) []T {
+	var out []T
+	for i := range in {
+		out = append(out, in[i]...)
+	}
+	return out
+}
+
 func asStateNodes[V StateNode](in []V) []StateNode {
 	out := make([]StateNode, len(in))
 	for i := range in {
@@ -31,45 +39,56 @@ type Schema struct {
 }
 
 type Table struct {
-	Schema  *Schema   `db:"-" json:"-"`
-	Name    string    `db:"name"`
-	Columns []*Column `db:"-"`
-	Indexes []*Index  `db:"-"`
-	// ForeignKeyConstraints []*ForeignKeyConstraints `db:"-"`
+	Schema                *Schema                 `db:"-" json:"-"`
+	Name                  string                  `db:"name"`
+	Columns               []*Column               `db:"-"`
+	Indexes               []*Index                `db:"-"`
+	ForeignKeyConstraints []*ForeignKeyConstraint `db:"-"`
 }
 
-// type ForeignKeyConstraints struct {
-// 	Name string    `db:"name"`
-// 	From []*Column `db:"-" json:"-"`
-// 	To   []*Column `db:"-" json:"-"`
-// }
+type ForeignKeyConstraint struct {
+	Name string `db:"name"`
+
+	From *Column `db:"-" json:"-"`
+	To   *Column `db:"-" json:"-"`
+}
 
 type Index struct {
-	Name    string    `db:"name"`
+	Unique bool   `db:"unique"`
+	Name   string `db:"name"`
+
 	Table   *Table    `db:"-" json:"-"`
-	Columns []*Column `db:"-" json:"-"`
+	Columns []*Column `db:"-"`
 }
 
 type Column struct {
+	Name string `db:"name"`
+
 	Table *Table `db:"-" json:"-"`
-	Name  string `db:"name"`
 }
 
-func (n *Root) Children() []StateNode     { return asStateNodes(n.Databases) }
-func (n *Database) Children() []StateNode { return asStateNodes(n.Schemas) }
-func (n *Schema) Children() []StateNode   { return asStateNodes(n.Tables) }
-func (n *Table) Children() []StateNode    { return asStateNodes(n.Columns) }
-func (n *Column) Children() []StateNode   { return nil }
-func (n *Index) Children() []StateNode    { return nil }
+func (n *Column) Children() []StateNode               { return nil }
+func (n *ForeignKeyConstraint) Children() []StateNode { return nil }
+func (n *Index) Children() []StateNode                { return nil }
+func (n *Database) Children() []StateNode             { return asStateNodes(n.Schemas) }
+func (n *Root) Children() []StateNode                 { return asStateNodes(n.Databases) }
+func (n *Schema) Children() []StateNode               { return asStateNodes(n.Tables) }
+func (n *Table) Children() []StateNode {
+	return flatten(
+		asStateNodes(n.Columns),
+		asStateNodes(n.Indexes),
+		asStateNodes(n.ForeignKeyConstraints),
+	)
+}
 
 type Queries struct {
-	Databases        string
-	Schemas          string
-	Tables           string
-	Columns          string
-	Indexes          string
-	ColumnsToIndexes string
-	// ForeignKeyConstraints          string
+	Databases             string
+	Schemas               string
+	Tables                string
+	Columns               string
+	Indexes               string
+	ColumnsToIndexes      string
+	ForeignKeyConstraints string
 	// ColumnsToForeignKeyConstraints string
 }
 
@@ -97,16 +116,22 @@ func loadState(ctx context.Context, conn *sqlx.DB, queries Queries) (*Root, erro
 		Column
 	}
 
-	// var columnIndexes []struct {
-	// 	TableID string `db:"table_id"`
-	// 	IndexID string `db:"index_id"`
-	// }
-	//
-	// var indexes []struct {
-	// 	ID      string `db:"id"`
-	// 	TableID string `db:"table_id"`
-	// 	Index
-	// }
+	var columnIndexes []struct {
+		ColumnID string `db:"column_id"`
+		IndexID  string `db:"index_id"`
+	}
+
+	var indexes []struct {
+		ID      string `db:"id"`
+		TableID string `db:"table_id"`
+		Index
+	}
+
+	var foreignKeyConstraints []struct {
+		FromID string `db:"from_id"`
+		ToID   string `db:"to_id"`
+		ForeignKeyConstraint
+	}
 
 	if err := sqlx.SelectContext(ctx, conn, &databases, queries.Databases); err != nil {
 		return nil, errors.WithStack(err)
@@ -124,9 +149,17 @@ func loadState(ctx context.Context, conn *sqlx.DB, queries Queries) (*Root, erro
 		return nil, errors.WithStack(err)
 	}
 
-	// if err := sqlx.SelectContext(ctx, conn, &indexes, queries.Indexes); err != nil {
-	// 	return nil, errors.WithStack(err)
-	// }
+	if err := sqlx.SelectContext(ctx, conn, &indexes, queries.Indexes); err != nil {
+		return nil, errors.WithStack(err)
+	}
+
+	if err := sqlx.SelectContext(ctx, conn, &columnIndexes, queries.ColumnsToIndexes); err != nil {
+		return nil, errors.WithStack(err)
+	}
+
+	if err := sqlx.SelectContext(ctx, conn, &foreignKeyConstraints, queries.ForeignKeyConstraints); err != nil {
+		return nil, errors.WithStack(err)
+	}
 
 	databasesByID := make(map[string]*Database, len(databases))
 	for i := range databases {
@@ -161,10 +194,36 @@ func loadState(ctx context.Context, conn *sqlx.DB, queries Queries) (*Root, erro
 		tablesByID[column.TableID].Columns = append(tablesByID[column.TableID].Columns, &column.Column)
 	}
 
+	indexesByID := make(map[string]*Index, len(indexes))
+	for i := range indexes {
+		index := &indexes[i]
+		indexesByID[index.ID] = &index.Index
+
+		index.Table = tablesByID[index.TableID]
+		tablesByID[index.TableID].Indexes = append(tablesByID[index.TableID].Indexes, &index.Index)
+	}
+
+	for _, colIndex := range columnIndexes {
+		// TODO, fix me?
+		if _, ok := indexesByID[colIndex.IndexID]; !ok {
+			continue
+		}
+		indexesByID[colIndex.IndexID].Columns = append(indexesByID[colIndex.IndexID].Columns, columnsByID[colIndex.ColumnID])
+	}
+
+	for i := range foreignKeyConstraints {
+		fk := &foreignKeyConstraints[i]
+
+		fk.To = columnsByID[fk.ToID]
+		fk.From = columnsByID[fk.FromID]
+		fk.From.Table.ForeignKeyConstraints = append(fk.From.Table.ForeignKeyConstraints, &fk.ForeignKeyConstraint)
+	}
+
 	rawDBs := make([]*Database, len(databases))
 	for i := range databases {
 		rawDBs[i] = &databases[i].Database
 	}
 
+	// TODO switch to using a DAG and order in comparisons or serializations.
 	return &Root{Databases: rawDBs}, nil
 }
