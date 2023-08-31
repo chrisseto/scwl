@@ -4,19 +4,17 @@ import (
 	"context"
 	"math/rand"
 	"strings"
+
+	"github.com/chrisseto/scwl/pkg/dag"
 )
 
 type Command interface {
 }
 
-type StateNode interface {
-	Children() []StateNode
-}
-
 type System interface {
 	Execute(context.Context, Command) error
 
-	State(context.Context) (StateNode, error)
+	State(context.Context) (*dag.Graph, error)
 }
 
 func FlipCoin() bool {

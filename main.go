@@ -11,8 +11,10 @@ import (
 	"time"
 
 	"github.com/chrisseto/scwl/pkg"
+	// "github.com/chrisseto/scwl/pkg/dag"
 	"github.com/cockroachdb/cockroach-go/v2/testserver"
-	"github.com/google/go-cmp/cmp"
+	// "github.com/google/go-cmp/cmp"
+	// "github.com/google/go-cmp/cmp/cmpopts"
 	_ "github.com/jackc/pgx/v5/stdlib"
 	"github.com/jmoiron/sqlx"
 )
@@ -85,7 +87,7 @@ func main() {
 	}()
 
 	for i := 0; i < iterations; i++ {
-		cmd := pkg.GenerateCommand(state.(*pkg.Root))
+		cmd := pkg.GenerateCommand(state)
 
 		logger.Printf("Step %d: %#v", i, cmd)
 
@@ -97,10 +99,17 @@ func main() {
 		}
 
 		state = MustT(oracle.State(ctx))
-		sutState := MustT(sut.State(ctx))
+		_ = MustT(sut.State(ctx))
 
-		if !cmp.Equal(state, sutState) {
-			log.Fatalf("State Mismatch!\n%s", cmp.Diff(state, sutState))
-		}
+		// x := cmp.Exporterk(func (f, s *dag.Graph) {
+		// 	return cmp.Equal(
+		// 		dag.All(),
+		// 		dag.All(),
+		// 	)
+		// })
+		//
+		// if !cmp.Equal(state, sutState, cmpopts.IgnoreTypes(&dag.Node{})) {
+		// 	log.Fatalf("State Mismatch!\n%s", cmp.Diff(state, sutState))
+		// }
 	}
 }

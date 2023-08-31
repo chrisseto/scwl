@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"math/rand"
 	"reflect"
+
+	"github.com/chrisseto/scwl/pkg/dag"
 )
 
 var Weights = map[reflect.Type]int{
@@ -16,18 +18,13 @@ var Weights = map[reflect.Type]int{
 	reflect.TypeOf(DropSchema{}):   0,
 }
 
-func GenerateCommand(s *Root) Command {
-	var cmds []Command
+func GenerateCommand(g *dag.Graph) Command {
+	cmds := []Command{
+		CreateDatabase{Name: RandomString()},
+	}
 
-	// TODO remove parents, all reference-able nodes can be reached via
-	// properties.
-	Walk(s, func(sn StateNode, parents []StateNode) {
-		switch n := sn.(type) {
-		case *Root:
-			cmds = append(cmds, CreateDatabase{
-				Name: RandomString(),
-			})
-
+	for _, node := range dag.All[dag.INode](g) {
+		switch n := node.(type) {
 		case *Database:
 			cmds = append(
 				cmds,
@@ -58,12 +55,12 @@ func GenerateCommand(s *Root) Command {
 				// RenameTable{Table: n, Name: RandomString()},
 			)
 
-			if len(n.Columns) > 1 {
+			if len(n.Columns()) > 1 {
 				cmds = append(
 					cmds,
 					CreateIndex{
 						Table:   n,
-						Columns: []*Column{n.Columns[0]},
+						Columns: []*Column{n.Columns()[0]},
 						Name:    RandomString(),
 						Unique:  true, // Hard coded for now.
 					},
@@ -72,19 +69,19 @@ func GenerateCommand(s *Root) Command {
 				// This is where a DAG structure really starts to shine
 				// through. In theory, we could write a graph query to find any
 				// two tables with at least 1 column.
-				for _, other := range n.Schema.Tables {
+				for _, other := range n.Schema().Tables() {
 					// Maybe this is fine though?
 					if other == n {
 						continue
 					}
-					for _, index := range other.Indexes {
+					for _, index := range other.Indexes() {
 						if !index.Unique {
 							continue
 						}
 
 						cmds = append(cmds, CreateForeignKeyConstraint{
-							From: n.Columns[0],
-							To:   index.Columns[0],
+							From: n.Columns()[0],
+							To:   index.Columns()[0],
 							Name: RandomString(),
 						})
 					}
@@ -97,17 +94,17 @@ func GenerateCommand(s *Root) Command {
 				DropColumn{Column: n},
 			)
 
-		case *ForeignKeyConstraint:
-			cmds = append(cmds, DropForeignKeyConstraint{ForeignKeyConstraint: n})
+		// case *ForeignKeyConstraint:
+		// 	cmds = append(cmds, DropForeignKeyConstraint{ForeignKeyConstraint: n})
 
 		case *Index:
 			cmds = append(cmds, DropIndex{Index: n})
 
 		default:
-			panic(fmt.Sprintf("Unhandled Type: %T", sn))
+			panic(fmt.Sprintf("Unhandled Type: %T", node))
 
 		}
-	})
+	}
 
 	// TODO this is pretty memory hungry, there's certainly a better way to do
 	// this. I'm just a bit lazy.
@@ -124,15 +121,4 @@ func GenerateCommand(s *Root) Command {
 	}
 
 	return weighted[rand.Intn(len(weighted))]
-}
-
-func Walk(n StateNode, cb func(StateNode, []StateNode)) {
-	var doWalk func(StateNode, []StateNode)
-	doWalk = func(n StateNode, stack []StateNode) {
-		cb(n, stack)
-		for _, c := range n.Children() {
-			doWalk(c, append([]StateNode{n}, stack...))
-		}
-	}
-	doWalk(n, nil)
 }

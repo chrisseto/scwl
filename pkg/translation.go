@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"reflect"
 	"text/template"
+
+	"github.com/chrisseto/scwl/pkg/dag"
 )
 
 func AsDDL(cmd Command) string {
@@ -100,30 +102,30 @@ var translations = map[reflect.Type]Translation{
 // TODO just use text/template
 func Tpl(body string, vars any) string {
 	tmpl, err := template.New("").Funcs(template.FuncMap{
-		"fqn": func(sn StateNode) string {
+		"fqn": func(sn dag.INode) string {
 			switch n := sn.(type) {
 			case *Database:
 				return n.Name
 			case *Schema:
-				return fmt.Sprintf("%s.%s", n.Database.Name, n.Name)
+				return fmt.Sprintf("%s.%s", n.Database().Name, n.Name)
 			case *Table:
-				return fmt.Sprintf("%s.%s.%s", n.Schema.Database.Name, n.Schema.Name, n.Name)
+				return fmt.Sprintf("%s.%s.%s", n.Schema().Database().Name, n.Schema().Name, n.Name)
 			case *Column:
-				return fmt.Sprintf("%s.%s.%s.%s", n.Table.Schema.Database.Name, n.Table.Schema.Name, n.Table.Name, n.Name)
+				return fmt.Sprintf("%s.%s.%s.%s", n.Table().Schema().Database().Name, n.Table().Schema().Name, n.Table().Name, n.Name)
 			case *Index:
-				return fmt.Sprintf("%s.%s.%s.%s", n.Table.Schema.Database.Name, n.Table.Schema.Name, n.Table.Name, n.Name)
+				return fmt.Sprintf("%s.%s.%s.%s", n.Table().Schema().Database().Name, n.Table().Schema().Name, n.Table().Name, n.Name)
 			default:
 				panic(fmt.Sprintf("unhandled type: %T", sn))
 			}
 		},
-		"fqnq": func(sn StateNode) string {
+		"fqnq": func(sn dag.INode) string {
 			switch n := sn.(type) {
 			case *Database:
 				return fmt.Sprintf("%q", n.Name)
 			case *Schema:
-				return fmt.Sprintf("%q.%q", n.Database.Name, n.Name)
+				return fmt.Sprintf("%q.%q", n.Database().Name, n.Name)
 			case *Table:
-				return fmt.Sprintf("%q.%q.%q", n.Schema.Database.Name, n.Schema.Name, n.Name)
+				return fmt.Sprintf("%q.%q.%q", n.Schema().Database().Name, n.Schema().Name, n.Name)
 			default:
 				panic(fmt.Sprintf("unhandled type: %T", sn))
 			}

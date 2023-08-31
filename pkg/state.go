@@ -3,48 +3,35 @@ package pkg
 import (
 	"context"
 
+	"github.com/chrisseto/scwl/pkg/dag"
 	"github.com/cockroachdb/errors"
 	"github.com/jmoiron/sqlx"
 )
 
-func flatten[T any](in ...[]T) []T {
-	var out []T
-	for i := range in {
-		out = append(out, in[i]...)
-	}
-	return out
-}
-
-func asStateNodes[V StateNode](in []V) []StateNode {
-	out := make([]StateNode, len(in))
-	for i := range in {
-		out[i] = in[i]
-	}
-	return out
-}
-
-type Root struct {
-	Databases []*Database
-}
-
 type Database struct {
-	Name    string    `db:"name"`
-	Schemas []*Schema `db:"-"`
+	dag.Node
+	Name string `db:"name"`
 }
+
+func (d *Database) Schemas() []*Schema { return dag.Outgoing[*Schema](d) }
 
 type Schema struct {
-	Database *Database `db:"-" json:"-"`
-	Name     string    `db:"name"`
-	Tables   []*Table  `db:"-"`
+	dag.Node
+	Name string `db:"name"`
 }
 
+func (s *Schema) Database() *Database { return dag.Incoming[*Database](s).One() }
+func (s *Schema) Tables() []*Table    { return dag.Outgoing[*Table](s) }
+
 type Table struct {
-	Schema                *Schema                 `db:"-" json:"-"`
-	Name                  string                  `db:"name"`
-	Columns               []*Column               `db:"-"`
-	Indexes               []*Index                `db:"-"`
-	ForeignKeyConstraints []*ForeignKeyConstraint `db:"-"`
+	dag.Node
+	Name string `db:"name"`
+	// ForeignKeyConstraints []*ForeignKeyConstraint `db:"-"`
 }
+
+func (t *Table) Schema() *Schema    { return dag.Incoming[*Schema](t).One() }
+func (t *Table) Columns() []*Column { return dag.Outgoing[*Column](t) }
+func (t *Table) Indexes() []*Index  { return dag.Outgoing[*Index](t) }
 
 type ForeignKeyConstraint struct {
 	Name string `db:"name"`
@@ -54,32 +41,20 @@ type ForeignKeyConstraint struct {
 }
 
 type Index struct {
+	dag.Node
 	Unique bool   `db:"unique"`
 	Name   string `db:"name"`
-
-	Table   *Table    `db:"-" json:"-"`
-	Columns []*Column `db:"-"`
 }
+
+func (i *Index) Table() *Table      { return dag.Incoming[*Table](i).One() }
+func (i *Index) Columns() []*Column { return dag.Outgoing[*Column](i) }
 
 type Column struct {
+	dag.Node
 	Name string `db:"name"`
-
-	Table *Table `db:"-" json:"-"`
 }
 
-func (n *Column) Children() []StateNode               { return nil }
-func (n *ForeignKeyConstraint) Children() []StateNode { return nil }
-func (n *Index) Children() []StateNode                { return nil }
-func (n *Database) Children() []StateNode             { return asStateNodes(n.Schemas) }
-func (n *Root) Children() []StateNode                 { return asStateNodes(n.Databases) }
-func (n *Schema) Children() []StateNode               { return asStateNodes(n.Tables) }
-func (n *Table) Children() []StateNode {
-	return flatten(
-		asStateNodes(n.Columns),
-		asStateNodes(n.Indexes),
-		asStateNodes(n.ForeignKeyConstraints),
-	)
-}
+func (c *Column) Table() *Table { return dag.Incoming[*Table](c).One() }
 
 type Queries struct {
 	Databases             string
@@ -92,7 +67,7 @@ type Queries struct {
 	// ColumnsToForeignKeyConstraints string
 }
 
-func loadState(ctx context.Context, conn *sqlx.DB, queries Queries) (*Root, error) {
+func loadState(ctx context.Context, conn *sqlx.DB, queries Queries) (*dag.Graph, error) {
 	var databases []struct {
 		ID string `db:"id"`
 		Database
@@ -161,69 +136,49 @@ func loadState(ctx context.Context, conn *sqlx.DB, queries Queries) (*Root, erro
 		return nil, errors.WithStack(err)
 	}
 
-	databasesByID := make(map[string]*Database, len(databases))
+	g := dag.New()
+
 	for i := range databases {
 		db := &databases[i]
-		databasesByID[db.ID] = &db.Database
+		g.AddNode(db.ID, &db.Database)
 	}
 
-	schemasByID := make(map[string]*Schema, len(schemas))
 	for i := range schemas {
 		schema := &schemas[i]
-		schemasByID[schema.ID] = &schema.Schema
-
-		schema.Database = databasesByID[schema.DatabaseID]
-		databasesByID[schema.DatabaseID].Schemas = append(databasesByID[schema.DatabaseID].Schemas, &schema.Schema)
+		g.AddNode(schema.ID, &schema.Schema)
+		g.AddEdge(schema.DatabaseID, schema.ID)
 	}
 
-	tablesByID := make(map[string]*Table, len(tables))
 	for i := range tables {
 		table := &tables[i]
-		tablesByID[table.ID] = &table.Table
-
-		table.Schema = schemasByID[table.SchemaID]
-		schemasByID[table.SchemaID].Tables = append(schemasByID[table.SchemaID].Tables, &table.Table)
+		g.AddNode(table.ID, &table.Table)
+		g.AddEdge(table.SchemaID, table.ID)
 	}
 
-	columnsByID := make(map[string]*Column, len(columns))
 	for i := range columns {
 		column := &columns[i]
-		columnsByID[column.ID] = &column.Column
-
-		column.Table = tablesByID[column.TableID]
-		tablesByID[column.TableID].Columns = append(tablesByID[column.TableID].Columns, &column.Column)
+		g.AddNode(column.ID, &column.Column)
+		g.AddEdge(column.TableID, column.ID)
 	}
 
-	indexesByID := make(map[string]*Index, len(indexes))
 	for i := range indexes {
 		index := &indexes[i]
-		indexesByID[index.ID] = &index.Index
-
-		index.Table = tablesByID[index.TableID]
-		tablesByID[index.TableID].Indexes = append(tablesByID[index.TableID].Indexes, &index.Index)
+		g.AddNode(index.ID, &index.Index)
+		g.AddEdge(index.TableID, index.ID)
 	}
 
 	for _, colIndex := range columnIndexes {
-		// TODO, fix me?
-		if _, ok := indexesByID[colIndex.IndexID]; !ok {
-			continue
-		}
-		indexesByID[colIndex.IndexID].Columns = append(indexesByID[colIndex.IndexID].Columns, columnsByID[colIndex.ColumnID])
+		g.AddEdge(colIndex.IndexID, colIndex.ColumnID)
 	}
 
-	for i := range foreignKeyConstraints {
-		fk := &foreignKeyConstraints[i]
+	// TODO
+	// for i := range foreignKeyConstraints {
+	// 	fk := &foreignKeyConstraints[i]
+	//
+	// 	fk.To = columnsByID[fk.ToID]
+	// 	fk.From = columnsByID[fk.FromID]
+	// 	fk.From.Table.ForeignKeyConstraints = append(fk.From.Table.ForeignKeyConstraints, &fk.ForeignKeyConstraint)
+	// }
 
-		fk.To = columnsByID[fk.ToID]
-		fk.From = columnsByID[fk.FromID]
-		fk.From.Table.ForeignKeyConstraints = append(fk.From.Table.ForeignKeyConstraints, &fk.ForeignKeyConstraint)
-	}
-
-	rawDBs := make([]*Database, len(databases))
-	for i := range databases {
-		rawDBs[i] = &databases[i].Database
-	}
-
-	// TODO switch to using a DAG and order in comparisons or serializations.
-	return &Root{Databases: rawDBs}, nil
+	return g, nil
 }

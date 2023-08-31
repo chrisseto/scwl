@@ -4,6 +4,7 @@ import (
 	"context"
 	"log"
 
+	"github.com/chrisseto/scwl/pkg/dag"
 	"github.com/cockroachdb/errors"
 	"github.com/jmoiron/sqlx"
 )
@@ -87,7 +88,7 @@ func (o *oracle) Execute(ctx context.Context, cmd Command) error {
 	return err
 }
 
-func (o *oracle) State(ctx context.Context) (StateNode, error) {
+func (o *oracle) State(ctx context.Context) (*dag.Graph, error) {
 	return loadState(ctx, o.conn, Queries{
 		Databases:             `SELECT id, name FROM databases ORDER BY name DESC`,
 		Schemas:               `SELECT database_id, id, name FROM schemas ORDER BY name DESC`,

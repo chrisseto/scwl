@@ -4,6 +4,7 @@ import (
 	"context"
 	"log"
 
+	"github.com/chrisseto/scwl/pkg/dag"
 	"github.com/jmoiron/sqlx"
 )
 
@@ -23,7 +24,7 @@ func (o *sut) Execute(ctx context.Context, cmd Command) error {
 	return err
 }
 
-func (o *sut) State(ctx context.Context) (StateNode, error) {
+func (o *sut) State(ctx context.Context) (*dag.Graph, error) {
 	const databasesQuery = `SELECT id, name FROM crdb_internal.databases WHERE name NOT IN ('system') ORDER BY name DESC`
 
 	const schemasQuery = `SELECT id, "parentID" as database_id, name FROM system.namespace WHERE "parentSchemaID" = 0 AND "parentID" > 1 ORDER BY name DESC`
