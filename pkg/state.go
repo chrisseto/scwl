@@ -8,6 +8,34 @@ import (
 	"github.com/jmoiron/sqlx"
 )
 
+func clone(in dag.INode) dag.INode {
+	// Go is weird. We can't clone a struct that implements an interface
+	// without doing some reflection magic. Instead, opted for a repetitive
+	// type switch. Could probably code gen it.
+	switch n := in.(type) {
+	case *Schema:
+		o := *n
+		return &o
+	case *Database:
+		o := *n
+		return &o
+	case *Table:
+		o := *n
+		return &o
+	case *Column:
+		o := *n
+		return &o
+	case *Index:
+		o := *n
+		return &o
+	case *ForeignKeyConstraint:
+		o := *n
+		return &o
+	default:
+		panic(errors.Newf("unhandled type %T", in))
+	}
+}
+
 type Database struct {
 	dag.Node
 	Name string `db:"name"`
@@ -29,16 +57,19 @@ type Table struct {
 	// ForeignKeyConstraints []*ForeignKeyConstraint `db:"-"`
 }
 
-func (t *Table) Schema() *Schema    { return dag.Incoming[*Schema](t).One() }
-func (t *Table) Columns() []*Column { return dag.Outgoing[*Column](t) }
-func (t *Table) Indexes() []*Index  { return dag.Outgoing[*Index](t) }
+func (t *Table) Schema() *Schema              { return dag.Incoming[*Schema](t).One() }
+func (t *Table) Columns() dag.Result[*Column] { return dag.Outgoing[*Column](t) }
+func (t *Table) Indexes() dag.Result[*Index]  { return dag.Outgoing[*Index](t) }
 
 type ForeignKeyConstraint struct {
+	dag.Node
 	Name string `db:"name"`
-
-	From *Column `db:"-" json:"-"`
-	To   *Column `db:"-" json:"-"`
 }
+
+// TODO relying on order here feels SUPER sketchy. We may need a way to
+// annotate edges...
+func (c *ForeignKeyConstraint) To() *Column   { return dag.Outgoing[*Column](c)[0] }
+func (c *ForeignKeyConstraint) From() *Column { return dag.Outgoing[*Column](c)[1] }
 
 type Index struct {
 	dag.Node
@@ -136,7 +167,7 @@ func loadState(ctx context.Context, conn *sqlx.DB, queries Queries) (*dag.Graph,
 		return nil, errors.WithStack(err)
 	}
 
-	g := dag.New()
+	g := dag.New(clone)
 
 	for i := range databases {
 		db := &databases[i]
@@ -146,39 +177,40 @@ func loadState(ctx context.Context, conn *sqlx.DB, queries Queries) (*dag.Graph,
 	for i := range schemas {
 		schema := &schemas[i]
 		g.AddNode(schema.ID, &schema.Schema)
-		g.AddEdge(schema.DatabaseID, schema.ID)
+		g.AddEdge(dag.ByID[dag.INode](g, schema.DatabaseID), &schema.Schema)
 	}
 
 	for i := range tables {
 		table := &tables[i]
 		g.AddNode(table.ID, &table.Table)
-		g.AddEdge(table.SchemaID, table.ID)
+		g.AddEdge(dag.ByID[dag.INode](g, table.SchemaID), &table.Table)
 	}
 
 	for i := range columns {
 		column := &columns[i]
 		g.AddNode(column.ID, &column.Column)
-		g.AddEdge(column.TableID, column.ID)
+		g.AddEdge(dag.ByID[dag.INode](g, column.TableID), &column.Column)
 	}
 
 	for i := range indexes {
 		index := &indexes[i]
 		g.AddNode(index.ID, &index.Index)
-		g.AddEdge(index.TableID, index.ID)
+		g.AddEdge(g.ByID(index.TableID), &index.Index)
 	}
 
 	for _, colIndex := range columnIndexes {
-		g.AddEdge(colIndex.IndexID, colIndex.ColumnID)
+		g.AddEdge(dag.ByID[dag.INode](g, colIndex.IndexID), dag.ByID[dag.INode](g, colIndex.ColumnID))
 	}
 
 	// TODO
-	// for i := range foreignKeyConstraints {
-	// 	fk := &foreignKeyConstraints[i]
-	//
-	// 	fk.To = columnsByID[fk.ToID]
-	// 	fk.From = columnsByID[fk.FromID]
-	// 	fk.From.Table.ForeignKeyConstraints = append(fk.From.Table.ForeignKeyConstraints, &fk.ForeignKeyConstraint)
-	// }
+	for i := range foreignKeyConstraints {
+		fk := &foreignKeyConstraints[i]
+		id := RandomString()
+		g.AddNode(id, &fk.ForeignKeyConstraint)
+
+		g.AddEdge(&fk.ForeignKeyConstraint, g.ByID(fk.ToID))
+		g.AddEdge(&fk.ForeignKeyConstraint, g.ByID(fk.FromID))
+	}
 
 	return g, nil
 }

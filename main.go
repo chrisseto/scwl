@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"log"
 	"math/rand"
@@ -11,10 +10,10 @@ import (
 	"time"
 
 	"github.com/chrisseto/scwl/pkg"
-	// "github.com/chrisseto/scwl/pkg/dag"
+	"github.com/chrisseto/scwl/pkg/dag"
 	"github.com/cockroachdb/cockroach-go/v2/testserver"
-	// "github.com/google/go-cmp/cmp"
-	// "github.com/google/go-cmp/cmp/cmpopts"
+	"github.com/google/go-cmp/cmp"
+	"github.com/google/go-cmp/cmp/cmpopts"
 	_ "github.com/jackc/pgx/v5/stdlib"
 	"github.com/jmoiron/sqlx"
 )
@@ -82,8 +81,8 @@ func main() {
 
 		state = MustT(oracle.State(ctx))
 		sutState := MustT(sut.State(ctx))
-		logger.Printf("\tSUT State: %s", MustT(json.MarshalIndent(sutState, "\t\t", "\t")))
-		logger.Printf("\tOracle State: %s", MustT(json.MarshalIndent(state, "\t\t", "\t")))
+		logger.Printf("\tSUT State: %s", sutState.String())
+		logger.Printf("\tOracle State: %s", state.String())
 	}()
 
 	for i := 0; i < iterations; i++ {
@@ -99,17 +98,30 @@ func main() {
 		}
 
 		state = MustT(oracle.State(ctx))
-		_ = MustT(sut.State(ctx))
+		sutState := MustT(sut.State(ctx))
 
-		// x := cmp.Exporterk(func (f, s *dag.Graph) {
-		// 	return cmp.Equal(
-		// 		dag.All(),
-		// 		dag.All(),
-		// 	)
+		opts := []cmp.Option{
+			// cmp.AllowUnexported(dag.Graph{}),
+			cmpopts.IgnoreTypes(dag.Node{}),
+			// cmpopts.IgnoreUnexported(dag.Node{}),
+			cmp.Transformer("Comparable", func(g *dag.Graph) []dag.CNode {
+				return g.Comparable()
+			}),
+		}
+
+		// x := cmp.Transformer("graph", func(g *dag.Graph) []dag.CNode {
+		// 	return g.Comparable()
+		// 	// return dag.All[dag.INode](g)
 		// })
-		//
-		// if !cmp.Equal(state, sutState, cmpopts.IgnoreTypes(&dag.Node{})) {
-		// 	log.Fatalf("State Mismatch!\n%s", cmp.Diff(state, sutState))
-		// }
+
+		if diff := cmp.Diff(
+			state, sutState, opts...,
+		); diff != "" {
+			// log.Printf("oracle: %s", MustT(json.MarshalIndent(state.Comparable(), "", "\t")))
+			// log.Printf("sut: %s", MustT(json.MarshalIndent(sutState.Comparable(), "", "\t")))
+			logger.Printf("\tSUT State: %s", sutState.String())
+			logger.Printf("\tOracle State: %s", state.String())
+			log.Fatalf("State Mismatch!\n%s", diff)
+		}
 	}
 }

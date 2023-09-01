@@ -1,5 +1,23 @@
 package pkg
 
+var AllCommands = []Command{
+	AddColumn{},
+	CreateDatabase{},
+	CreateForeignKeyConstraint{},
+	CreateIndex{},
+	CreateSchema{},
+	CreateTable{},
+	DropColumn{},
+	DropDatabase{},
+	DropForeignKeyConstraint{},
+	DropIndex{},
+	DropSchema{},
+	DropTable{},
+	RenameDatabase{},
+	RenameSchema{},
+	RenameTable{},
+}
+
 type CreateDatabase struct {
 	Name string
 }
