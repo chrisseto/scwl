@@ -7,7 +7,17 @@ import (
 	"text/template"
 
 	"github.com/chrisseto/scwl/pkg/dag"
+	"github.com/cockroachdb/errors"
 )
+
+func init() {
+	// Linting, assert that there's a translation for every Command.
+	for _, cmd := range AllCommands {
+		if _, ok := translations[reflect.TypeOf(cmd)]; !ok {
+			panic(errors.Newf("missing DDL/DML translation for %T", cmd))
+		}
+	}
+}
 
 func AsDDL(cmd Command) string {
 	tpl, ok := translations[reflect.TypeOf(cmd)]
@@ -97,27 +107,24 @@ var translations = map[reflect.Type]Translation{
 		DDL: `DROP INDEX {{ .Index.Table | fqnq }}@"{{ .Index.Name }}" CASCADE`,
 		DML: `DELETE FROM indexes WHERE id = '{{ .Index | fqn }}'`,
 	},
+	reflect.TypeOf(RenameDatabase{}): {
+		DDL: `ALTER DATABASE {{ .Database | fqnq }} RENAME TO "{{ .Name }}"`,
+		DML: `UPDATE databases SET name = '{{ .Name }}' WHERE id = '{{ .Database | fqn }}'`,
+	},
+	reflect.TypeOf(RenameSchema{}): {
+		DDL: `ALTER SCHEMA {{ .Schema | fqnq }} RENAME TO "{{ .Name }}"`,
+		DML: `UPDATE schemas SET name = '{{ .Name }}' WHERE id = '{{ .Schema | fqn }}'`,
+	},
+	reflect.TypeOf(RenameTable{}): {
+		DDL: `ALTER TABLE {{ .Table | fqnq }} RENAME TO "{{ .Name }}"`,
+		DML: `UPDATE tables SET name = '{{ .Name }}' WHERE id = '{{ .Table | fqn }}'`,
+	},
 }
 
 // TODO just use text/template
 func Tpl(body string, vars any) string {
 	tmpl, err := template.New("").Funcs(template.FuncMap{
-		"fqn": func(sn dag.INode) string {
-			switch n := sn.(type) {
-			case *Database:
-				return n.Name
-			case *Schema:
-				return fmt.Sprintf("%s.%s", n.Database().Name, n.Name)
-			case *Table:
-				return fmt.Sprintf("%s.%s.%s", n.Schema().Database().Name, n.Schema().Name, n.Name)
-			case *Column:
-				return fmt.Sprintf("%s.%s.%s.%s", n.Table().Schema().Database().Name, n.Table().Schema().Name, n.Table().Name, n.Name)
-			case *Index:
-				return fmt.Sprintf("%s.%s.%s.%s", n.Table().Schema().Database().Name, n.Table().Schema().Name, n.Table().Name, n.Name)
-			default:
-				panic(fmt.Sprintf("unhandled type: %T", sn))
-			}
-		},
+		"fqn": FullyQualifiedName,
 		"fqnq": func(sn dag.INode) string {
 			switch n := sn.(type) {
 			case *Database:

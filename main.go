@@ -41,7 +41,9 @@ func NewSUT(ctx context.Context) pkg.System {
 		sutTS.Stop()
 	}()
 
-	sutDB := MustT(sqlx.Open("pgx", sutTS.PGURL().String()))
+	url := sutTS.PGURL()
+	url.Path = "system"
+	sutDB := MustT(sqlx.Open("pgx", url.String()))
 	return pkg.NewSUT(sutDB, logger)
 }
 
@@ -88,7 +90,7 @@ func main() {
 	for i := 0; i < iterations; i++ {
 		cmd := pkg.GenerateCommand(state)
 
-		logger.Printf("Step %d: %#v", i, cmd)
+		logger.Printf("Step %d: %s", i, pkg.CommandToString(cmd))
 
 		if err := oracle.Execute(ctx, cmd); err != nil {
 			panic(err)

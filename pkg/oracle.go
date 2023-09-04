@@ -28,14 +28,14 @@ CREATE TABLE tables (
 );
 
 CREATE TABLE columns (
-	id TEXT PRIMARY KEY AS (table_id || '.' || name) STORED,
+	id TEXT PRIMARY KEY AS (table_id || '.cols.' || name) STORED,
 	table_id TEXT NOT NULL REFERENCES tables(id) ON DELETE CASCADE ON UPDATE CASCADE,
 	name TEXT NOT NULL,
 	nullable BOOL NOT NULL
 );
 
 CREATE TABLE indexes (
-	id TEXT PRIMARY KEY AS (table_id || '.' || name) STORED,
+	id TEXT PRIMARY KEY AS (table_id || '.idxs.' || name) STORED,
 	table_id TEXT NOT NULL REFERENCES tables(id) ON DELETE CASCADE ON UPDATE CASCADE,
 	name TEXT NOT NULL,
 	"unique" BOOL NOT NULL

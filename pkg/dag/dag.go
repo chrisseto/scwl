@@ -1,13 +1,15 @@
 package dag
 
 import (
-	// "bytes"
 	"bytes"
 	"fmt"
 	"reflect"
-	// "strings"
-	// "golang.org/x/exp/maps"
 )
+
+type VNode[T any] struct {
+	g     *Graph
+	value T
+}
 
 type INode interface {
 	graph() *Graph
@@ -23,7 +25,11 @@ func (n *Node) graph() *Graph {
 }
 
 func (n *Node) setGraph(g *Graph) {
-	n.g = g
+	if n == nil {
+		n = &Node{g: g}
+	} else {
+		n.g = g
+	}
 }
 
 func New(clone func(INode) INode) *Graph {
@@ -53,10 +59,11 @@ func (g *Graph) ByID(id string) INode {
 	return g.nodesByID[id]
 }
 
-func (g *Graph) AddNode(id string, n INode) {
+func (g *Graph) AddNode(id string, n INode) INode {
 	n.setGraph(g)
 	g.nodes = append(g.nodes, n)
 	g.nodesByID[id] = n
+	return n
 }
 
 func (g *Graph) AddEdge(from, to INode) {
@@ -64,6 +71,10 @@ func (g *Graph) AddEdge(from, to INode) {
 	g.incoming[to] = append(g.incoming[to], from)
 	g.outgoing[from] = append(g.outgoing[from], to)
 }
+
+// func (g *Graph) Diff(other *Graph) {
+//
+// }
 
 func (g *Graph) String() string {
 	var b bytes.Buffer
@@ -97,10 +108,6 @@ func (g *Graph) String() string {
 	return b.String()
 	// return strings.Join(nodes, "\n")
 }
-
-// func (g *Graph) Clone() *Graph {
-//
-// }
 
 type Edge struct {
 	From INode

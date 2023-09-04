@@ -9,6 +9,19 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
+func NotPublic(s *Schema) bool {
+	return s.Name != "public"
+}
+
+func init() {
+	// Linting, assert that there's a generator for every Command.
+	for _, cmd := range AllCommands {
+		if _, ok := Generators[reflect.TypeOf(cmd)]; !ok {
+			panic(errors.Newf("missing Generator for %T", cmd))
+		}
+	}
+}
+
 var Weights = map[reflect.Type]int{
 	reflect.TypeOf(CreateIndex{}):  3,
 	reflect.TypeOf(AddColumn{}):    3,
@@ -19,6 +32,8 @@ var Weights = map[reflect.Type]int{
 	reflect.TypeOf(DropSchema{}):   0,
 }
 
+// TODO: There's probably no reason to use reflect.TypeOf here. Command is
+// fine.
 var Generators = map[reflect.Type]func(*dag.Graph) Command{
 	// DROP ... https://github.com/cockroachdb/cockroach/blob/master/pkg/sql/parser/sql.y#L5447-L5455
 	reflect.TypeOf(DropDatabase{}): func(g *dag.Graph) Command { return DropDatabase{dag.Nodes[*Database](g).Any()} },
@@ -66,9 +81,24 @@ var Generators = map[reflect.Type]func(*dag.Graph) Command{
 	// CreateProc
 
 	// ALTER ... https://github.com/cockroachdb/cockroach/blob/master/pkg/sql/parser/sql.y#L1816-L1830
-	reflect.TypeOf(RenameTable{}):    func(g *dag.Graph) Command { panic("not implemented") },
-	reflect.TypeOf(RenameSchema{}):   func(g *dag.Graph) Command { panic("not implemented") },
-	reflect.TypeOf(RenameDatabase{}): func(g *dag.Graph) Command { panic("not implemented") },
+	reflect.TypeOf(RenameTable{}): func(g *dag.Graph) Command {
+		return RenameTable{
+			Table: dag.Any[*Table](g),
+			Name:  RandomString(),
+		}
+	},
+	reflect.TypeOf(RenameSchema{}): func(g *dag.Graph) Command {
+		return RenameSchema{
+			Schema: dag.Any[*Schema](g, NotPublic),
+			Name:   RandomString(),
+		}
+	},
+	reflect.TypeOf(RenameDatabase{}): func(g *dag.Graph) Command {
+		return RenameDatabase{
+			Database: dag.Any[*Database](g),
+			Name:     RandomString(),
+		}
+	},
 
 	// ALTER TABLE ... https://github.com/cockroachdb/cockroach/blob/master/pkg/sql/parser/sql.y#L1878-L1888
 	reflect.TypeOf(DropColumn{}):               func(g *dag.Graph) Command { return DropColumn{dag.Nodes[*Column](g).Any()} },
@@ -100,15 +130,6 @@ var Generators = map[reflect.Type]func(*dag.Graph) Command{
 			To:   to,
 		}
 	},
-}
-
-func init() {
-	// Linting, assert that there's a generator for every Command.
-	for _, cmd := range AllCommands {
-		if _, ok := Generators[reflect.TypeOf(cmd)]; !ok {
-			panic(errors.Newf("missing Generator for %T", cmd))
-		}
-	}
 }
 
 func GenerateCommand(g *dag.Graph) Command {
