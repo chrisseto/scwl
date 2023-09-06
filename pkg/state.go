@@ -8,34 +8,6 @@ import (
 	"github.com/jmoiron/sqlx"
 )
 
-func clone(in dag.INode) dag.INode {
-	// Go is weird. We can't clone a struct that implements an interface
-	// without doing some reflection magic. Instead, opted for a repetitive
-	// type switch. Could probably code gen it.
-	switch n := in.(type) {
-	case *Schema:
-		o := *n
-		return &o
-	case *Database:
-		o := *n
-		return &o
-	case *Table:
-		o := *n
-		return &o
-	case *Column:
-		o := *n
-		return &o
-	case *Index:
-		o := *n
-		return &o
-	case *ForeignKeyConstraint:
-		o := *n
-		return &o
-	default:
-		panic(errors.Newf("unhandled type %T", in))
-	}
-}
-
 type Database struct {
 	dag.Node
 	Name string `db:"name"`
@@ -202,10 +174,9 @@ func loadState(ctx context.Context, conn *sqlx.DB, queries Queries) (*dag.Graph,
 		g.AddEdge(dag.ByID[dag.INode](g, colIndex.IndexID), dag.ByID[dag.INode](g, colIndex.ColumnID))
 	}
 
-	// TODO
 	for i := range foreignKeyConstraints {
 		fk := &foreignKeyConstraints[i]
-		id := RandomString()
+		id := RandomString() // A bit weird but FKs are currently seen as composites rather than their own entity. 
 		g.AddNode(id, &fk.ForeignKeyConstraint)
 
 		g.AddEdge(&fk.ForeignKeyConstraint, g.ByID(fk.ToID))
@@ -213,4 +184,32 @@ func loadState(ctx context.Context, conn *sqlx.DB, queries Queries) (*dag.Graph,
 	}
 
 	return g, nil
+}
+
+func clone(in dag.INode) dag.INode {
+	// Go is weird. We can't clone a struct that implements an interface
+	// without doing some reflection magic. Instead, opted for a repetitive
+	// type switch. Could probably code gen it.
+	switch n := in.(type) {
+	case *Schema:
+		o := *n
+		return &o
+	case *Database:
+		o := *n
+		return &o
+	case *Table:
+		o := *n
+		return &o
+	case *Column:
+		o := *n
+		return &o
+	case *Index:
+		o := *n
+		return &o
+	case *ForeignKeyConstraint:
+		o := *n
+		return &o
+	default:
+		panic(errors.Newf("unhandled type %T", in))
+	}
 }

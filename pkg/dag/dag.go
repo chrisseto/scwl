@@ -6,24 +6,28 @@ import (
 	"reflect"
 )
 
-type VNode[T any] struct {
-	g     *Graph
-	value T
-}
-
 type INode interface {
 	graph() *Graph
 	setGraph(*Graph)
 }
 
+// Node implements [INode] and should be embedded into structs that will be
+// added to a [Graph]. Usage:
+//
+//	type Entity struct {
+//		dag.Node
+//		Attribute string
+//	}
 type Node struct {
 	g *Graph `json:"-"`
 }
 
+// graph implements [INode.graph].
 func (n *Node) graph() *Graph {
 	return n.g
 }
 
+// setGraph implements [INode.seGraph].
 func (n *Node) setGraph(g *Graph) {
 	if n == nil {
 		n = &Node{g: g}
@@ -72,15 +76,10 @@ func (g *Graph) AddEdge(from, to INode) {
 	g.outgoing[from] = append(g.outgoing[from], to)
 }
 
-// func (g *Graph) Diff(other *Graph) {
-//
-// }
-
 func (g *Graph) String() string {
 	var b bytes.Buffer
 
 	nodes := make(map[INode]int, len(g.nodes))
-	// nodes := make([]string, len(g.nodes))
 	for i, n := range g.nodes {
 		nodes[n] = i
 		v := reflect.ValueOf(n).Elem()
@@ -101,12 +100,10 @@ func (g *Graph) String() string {
 
 	for _, from := range g.nodes {
 		for _, to := range g.outgoing[from] {
-			// fromT := reflect.TypeOf()
 			fmt.Fprintf(&b, "%T(%d) -> %T(%d)\n", from, nodes[from], to, nodes[to])
 		}
 	}
 	return b.String()
-	// return strings.Join(nodes, "\n")
 }
 
 type Edge struct {
@@ -157,13 +154,6 @@ func (g *Graph) Comparable() []CNode {
 			Outgoing: outgoing,
 			Incoming: incoming,
 		}
-
-		// for _, to := range g.outgoing[cloneToNode[n]] {
-		// 	edges = append(edges, [2]int{
-		// 		i,
-		// 		nodeToIndex[nodeToClone[to]],
-		// 	})
-		// }
 	}
 
 	return cnodes

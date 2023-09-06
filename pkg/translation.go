@@ -121,7 +121,6 @@ var translations = map[reflect.Type]Translation{
 	},
 }
 
-// TODO just use text/template
 func Tpl(body string, vars any) string {
 	tmpl, err := template.New("").Funcs(template.FuncMap{
 		"fqn": FullyQualifiedName,

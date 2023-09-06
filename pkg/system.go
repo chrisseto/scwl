@@ -8,8 +8,7 @@ import (
 	"github.com/chrisseto/scwl/pkg/dag"
 )
 
-type Command interface {
-}
+type Command interface{}
 
 type System interface {
 	Execute(context.Context, Command) error
