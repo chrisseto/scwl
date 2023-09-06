@@ -86,7 +86,7 @@ var translations = map[reflect.Type]Translation{
 		DML: `
 			INSERT INTO indexes(table_id, name, "unique") VALUES ('{{ .Table | fqn }}', '{{ .Name }}', {{ .Unique }});
 			{{range $i, $column := .Columns}}
-				INSERT INTO index_columns(index_id, column_id) VALUES ('{{ .Table | fqn }}.{{ $.Name }}', '{{ $column | fqn }}');
+				INSERT INTO index_columns(index_id, column_id) VALUES ('{{ .Table | fqn }}.idxs.{{ $.Name }}', '{{ $column | fqn }}');
 			{{end}}
 		`,
 	},
